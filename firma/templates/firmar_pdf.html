@@ -1,0 +1,91 @@
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %} {{ form.as_p }}
+    <div class="col">
+        <label for="paginaFirmar">Página a firmar</label>
+        <input class="file-input" type="number" min="1" value="1" id="paginaFirmar" name="paginaFirmar" required>
+    </div>
+    <div class="col">
+        <input class="file-input" type="file" id="pdfFile" name="pdf" required accept=".pdf">
+        <canvas id="pdfCanvas"></canvas>
+        <input type="hidden" name="coords" id="coords" />
+        <button type="submit">Firmar PDF</button>
+    </div>
+</form>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.8.162/pdf.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Configura el worker de PDF.js (es necesario para que funcione en todos los navegadores, incluido Edge)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.8.162/pdf.worker.min.js';
+
+        function obtenerArchivoPDF() {
+            const input = document.querySelector('#pdfFile');
+            if (input && input.files && input.files.length > 0) {
+                return input.files[0];
+            }
+            return null;
+        }
+
+        async function visualizarPdf(file) {
+
+            const scalePdf = 1.5;
+            let viewportOriginalHeight = 0;
+
+            if (!file) return;
+
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({
+                data: new Uint8Array(arrayBuffer)
+            }).promise;
+
+            const numberPage = document.getElementById('paginaFirmar').value
+            const page = await pdf.getPage(parseInt(numberPage, 10));
+
+
+            const viewport = page.getViewport({
+                scale: scalePdf
+            });
+            const viewportOriginal = page.getViewport({
+                scale: 1.0
+            });
+            viewportOriginalHeight = viewportOriginal.height;
+
+            const canvas = document.getElementById('pdfCanvas');
+            const context = canvas.getContext('2d');
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+                canvasContext: context,
+                viewport
+            }).promise;
+
+            canvas.onclick = (event) => {
+
+                const rect = canvas.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+
+                const pdfX = clickX / scalePdf;
+                const pdfY = viewportOriginalHeight - (clickY / scalePdf);
+
+                document.getElementById('coords').value = `${pdfX},${pdfY},${numberPage}`;
+            };
+
+        }
+
+        document.getElementById('pdfFile').addEventListener('change', async(e) => {
+            await visualizarPdf(e.target.files[0])
+        });
+
+        document.getElementById('paginaFirmar').addEventListener('change', async() => {
+            const archivoPDF = obtenerArchivoPDF();
+            if (archivoPDF) {
+                await visualizarPdf(archivoPDF);
+            } else {
+                alert("Primero debes seleccionar un archivo PDF.");
+            }
+        });
+    });
+</script>

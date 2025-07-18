@@ -1,0 +1,6 @@
+Django>=3.2,<5.0
+pyhanko>=0.18
+qrcode
+Pillow
+pikepdf
+endesive==1.5.12
