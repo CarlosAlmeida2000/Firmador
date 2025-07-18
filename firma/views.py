@@ -68,10 +68,10 @@ def crear_estampa_firma(nombre_firmante, razon, localizacion, fecha):
     qr.make(fit=True)
     qr_img_rgb = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_img_cropped = qr_img_rgb.crop(qr_img_rgb.getbbox())
-    qr_final = qr_img_cropped.resize((100, 103), resample=Image.Resampling.NEAREST)
+    qr_final = qr_img_cropped.resize((100, 105), resample=Image.Resampling.NEAREST)
 
     # Crear estampa
-    ancho, alto = 300, 103
+    ancho, alto = 300, 105
     estampa = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
     estampa.paste(qr_final.convert("RGBA"), (0, 0))
 
@@ -160,7 +160,7 @@ def firmar_pdf(request):
                     "sigfield": "Signature1",
                     "auto_sigfield": True,
                     "sigandcertify": True,
-                    "signaturebox": (x, y, x + 108, y + 35),  
+                    "signaturebox": (x, y, x + 108, y + 36),  
                     "signature_img": ruta_estampa,
                     "contact": nombre_firmante,
                     "location": localizacion,
