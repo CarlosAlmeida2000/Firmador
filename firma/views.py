@@ -23,7 +23,6 @@ from reportlab.pdfbase.ttfonts import TTFont
 CERT_PATH = os.path.join(settings.MEDIA_ROOT, 'certificados')
 
 
-
 def upload_certificado(request):
     if request.method == 'POST':
         form = CertificadoForm(request.POST, request.FILES)
@@ -222,83 +221,6 @@ def crear_estampa_firma2(nombre_firmante, razon, localizacion, fecha):
     return ruta, lineas_nombre
 
 
-def firmar_pdf(request):
-
-    if request.method == 'POST':
-
-        # Recupera el formulario enviado
-        form = PDFUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            try:
-
-                # Obtener datos del ultimo certificado de firma electronica desde la base de datos
-                certificado = Certificado.objects.latest('creado')
-                with open(certificado.archivo.path, 'rb') as f:
-                    p12_data = f.read()
-
-                # Cargar certificado de firma electrónica con la clave
-                p12 = pkcs12.load_key_and_certificates(
-                    p12_data, certificado.clave.encode("ascii"), backends.default_backend()
-                )
-
-                cert_x509 = p12[1]
-                nombre_firmante = cert_x509.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
-
-                # Obtener datos del formulario
-                pdf_file = request.FILES['pdf']
-                coords = request.POST.get('coords')
-                x_str, y_str, page_str = coords.split(',')
-                x = float(x_str)
-                y = float(y_str)
-                page = int(page_str) 
-                razon = form.cleaned_data['razon']
-                localizacion = form.cleaned_data['localizacion']
-                fecha_firma = form.cleaned_data['fecha']
-
-                # Crear estampa QR de la firma electrónica
-                ruta_estampa = crear_estampa_firma(nombre_firmante, razon, localizacion, fecha_firma.isoformat())
-
-                # Despues de crear el QR se transforma la fecha por motivos de zona horario del firmado aumentando 5 horas
-                fecha_firma = fecha_firma + timedelta(hours=5)
-                date_str = fecha_firma.strftime('%Y%m%d%H%M%S+00\'00\'')
-                
-                dct = {
-                    "aligned": 0,
-                    "sigflags": 3,
-                    "sigflagsft": 132,
-                    "sigpage": (page - 1),
-                    "sigbutton": True,
-                    "sigfield": "Signature1",
-                    "auto_sigfield": True,
-                    "sigandcertify": True,
-                    "signaturebox": (x, y, x + 108, y + 36),  
-                    "signature_img": ruta_estampa,
-                    "contact": nombre_firmante,
-                    "location": localizacion,
-                    "signingdate": date_str,
-                    "reason": razon,
-                    "password": certificado.clave.encode("ascii"),
-                }
-
-                # Firmar documento electrónicamente
-                datau = pdf_file.read()
-                datas = cms.sign(datau, dct, p12[0], p12[1], p12[2], "sha256")
-                archivo_pdf_firmado = io.BytesIO()
-                archivo_pdf_firmado.write(datau)
-                archivo_pdf_firmado.write(datas)
-                archivo_pdf_firmado.seek(0)
-
-                return FileResponse(archivo_pdf_firmado, as_attachment=True, filename="firmado-signed.pdf")
-
-            except Exception as e:
-                print(str(e))
-                return render(request, 'firmar_pdf.html', {'form': form})
-
-    else:
-        form = PDFUploadForm()
-    return render(request, 'firmar_pdf.html', {'form': form})
-
-
 def firmar_pdf2(request):
 
     if request.method == 'POST':
@@ -386,6 +308,115 @@ def firmar_pdf2(request):
             except Exception as e:
                 print(str(e))
                 return render(request, 'firmar_pdf.html', {'form': form})
+
+    else:
+        form = PDFUploadForm()
+    return render(request, 'firmar_pdf.html', {'form': form})
+
+
+
+
+
+
+
+
+from pyhanko.sign import signers
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.sign.fields import append_signature_field, SigFieldSpec
+from pyhanko.sign.signers import PdfSignatureMetadata
+from pyhanko import stamp
+from pyhanko.pdf_utils import text
+from pyhanko.sign import fields, signers
+
+
+
+def firmar_pdf(request):
+
+    if request.method == 'POST':
+
+        # Recupera el formulario enviado
+        form = PDFUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                # Obtener datos del ultimo certificado de firma electronica desde la base de datos
+                certificado = Certificado.objects.latest('creado')
+                with open(certificado.archivo.path, 'rb') as f:
+                    p12_data = f.read()
+
+                # Cargar certificado de firma electrónica con la clave
+                p12 = pkcs12.load_key_and_certificates(
+                    p12_data, certificado.clave.encode("ascii"), backends.default_backend()
+                )
+
+                cert_x509 = p12[1]
+                nombre_firmante = cert_x509.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+
+                # Obtener datos del formulario
+                pdf_file = request.FILES['pdf']
+                coords = request.POST.get('coords')
+                x_str, y_str, page_str = coords.split(',')
+                x = float(x_str)
+                y = float(y_str)
+                page = int(page_str) 
+                razon = form.cleaned_data['razon']
+                localizacion = form.cleaned_data['localizacion']
+                fecha_firma = form.cleaned_data['fecha']
+
+                #pdf_path = r'D:\env-firma-ec\Firmador\media\temp\Memorando Nro 158-signed.pdf'
+                output_path = r'D:\env-firma-ec\Firmador\media\temp\con_estampa-signed.pdf'
+                
+                # Crear un firmante basado en el certificado
+                signer = signers.SimpleSigner.load_pkcs12(pfx_file=certificado.archivo.path, passphrase=certificado.clave.encode('utf-8'))
+                
+                print("FIRMADA CARGADA")
+
+                # Abrir el PDF para agregar la firma
+                writer = IncrementalPdfFileWriter(pdf_file)
+
+                fields.append_signature_field(
+                    writer, sig_field_spec=fields.SigFieldSpec(
+                        (nombre_firmante + str(fecha_firma)), 
+                        box=(x, y, x + 120, y + 45), 
+                        on_page=(page - 1)
+                    )
+                )
+
+                meta = signers.PdfSignatureMetadata(field_name=(nombre_firmante + str(fecha_firma)))
+
+                print("PDF CARGADO")
+               
+                pdf_signer = signers.PdfSigner(
+                    meta, signer=signer, stamp_style=stamp.QRStampStyle(
+                        #stamp_text='Signed by: %(signer)s\nTime: %(ts)s\nURL: %(url)s',
+                        stamp_text='Firmado electrónicamente por: s\n %(signer)s\n Validar únicamente con FirmaEC',
+                    ),
+                )
+
+
+                # Firmar el documento
+                qr_text = f"""FIRMADO POR: {nombre_firmante}\nRAZON: {razon}\nLOCALIZACION: {localizacion}\nFECHA: {fecha_firma.isoformat()}\nVALIDAR CON: https://www.firmadigital.gob.ec\nFirmado digitalmente con FirmaEC 4.0.0 Windows 10 10.0"""
+
+                with open(output_path, "wb") as output_file:
+                    pdf_signer.sign_pdf(
+                        writer,
+                        output=output_file,
+                        appearance_text_params={'url': qr_text}
+                    )
+                
+
+                # Puedes mostrar el PDF firmado o devolverlo como descarga
+                print("FIRMADOOOOOOOO")
+                return render(request, 'firmar_pdf.html', {
+                    'form': form,
+                    'mensaje': 'Documento firmado correctamente.'
+                })
+
+            except Exception as e:
+                print("Error en firma:", str(e))
+                return render(request, 'firmar_pdf.html', {
+                    'form': form,
+                    'error': 'Ocurrió un error al firmar el documento.'
+                })
 
     else:
         form = PDFUploadForm()
