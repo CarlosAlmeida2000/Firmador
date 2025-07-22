@@ -187,21 +187,16 @@ def firmar_pdf(request):
                         output=output_file,
                         appearance_text_params={'url': qr_text}
                     )
-                
 
-                # Puedes mostrar el PDF firmado o devolverlo como descarga
+                # Devolver como descarga
                 print("FIRMADOOOOOOOO")
-                return render(request, 'firmar_pdf.html', {
-                    'form': form,
-                    'mensaje': 'Documento firmado correctamente.'
-                })
+                output_pdf = open(output_path, "rb")
+                
+                return FileResponse(output_pdf, as_attachment=True, filename="firmado-signed.pdf")
 
             except Exception as e:
-                print("Error en firma:", str(e))
-                return render(request, 'firmar_pdf.html', {
-                    'form': form,
-                    'error': 'Ocurrió un error al firmar el documento.'
-                })
+                print("Error al firmar documento:", str(e))
+                return render(request, 'firmar_pdf.html', {'form': form})
 
     else:
         form = PDFUploadForm()
