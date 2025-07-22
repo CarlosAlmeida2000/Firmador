@@ -3,4 +3,3 @@ pyhanko>=0.18
 qrcode
 Pillow
 pikepdf
-endesive==1.5.12
