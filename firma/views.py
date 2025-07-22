@@ -143,8 +143,6 @@ def firmar_pdf(request):
                 razon = form.cleaned_data['razon']
                 localizacion = form.cleaned_data['localizacion']
                 fecha_firma = form.cleaned_data['fecha']
-
-                #pdf_path = r'D:\env-firma-ec\Firmador\media\temp\Memorando Nro 158-signed.pdf'
                 output_path = os.path.join(settings.MEDIA_ROOT, 'temp\con_estampa-signed.pdf')
                 
                 # Crear un firmante basado en el certificado
